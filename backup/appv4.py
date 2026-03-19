@@ -71,7 +71,7 @@ class ControlPanelV4:
         self.log_frame.pack_propagate(False)
         
         tk.Label(self.log_frame, text=" SYSTEM LOGS & OUTPUT ", fg="white", bg="#333", font=('Arial', 10, 'bold')).pack(fill=tk.X)
-        self.error_text = scrolledtext.ScrolledText(self.log_frame, bg="#000", fg="#cccccc", font=("Courier", 10), borderwidth=0)
+        self.error_text = scrolledtext.ScrolledText(self.log_frame, bg="#000", fg="#00ff41", font=("Courier", 8), borderwidth=0)
         self.error_text.pack(fill=tk.BOTH, expand=True)
 
         # 2. 50% MAIN NOTEBOOK
@@ -168,39 +168,20 @@ class ControlPanelV4:
 
     def sync_sys_prefix(self):
         def _task():
-            urls = [
-                "https://worldtimeapi.org/api/timezone/Etc/UTC",
-                "https://timeapi.io/api/Time/current/zone?timeZone=UTC"
-            ]
-            for url in urls:
-                try:
-                    self.log(f"Sync: Querying {url.split('/')[2]}...")
-                    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                    with urllib.request.urlopen(req, timeout=5) as res:
-                        data = json.load(res)
-                        # Handle different API response formats
-                        if "utc_datetime" in data:
-                            dt = data["utc_datetime"].split(".")[0].replace("T", " ")
-                        elif "dateTime" in data:
-                            dt = data["dateTime"].split(".")[0].replace("T", " ")
-                        else:
-                            continue
-                        
-                        if self.run_raw_sync(f"sudo date -s '{dt}'"):
-                            self.run_raw_sync("sudo hwclock --systohc -f /dev/rtc")
-                            self.log(f"Sync Success: {dt}")
-                            self.refresh_rtc_display()
-                            return
-                except Exception as e:
-                    self.log(f"Sync attempt failed: {e}")
-            self.log("Sync Fail: All sources exhausted. Check internet connection.")
+            try:
+                self.log("NTP: Querying...")
+                res = urllib.request.urlopen("http://worldtimeapi.org/api/timezone/Etc/UTC", timeout=5)
+                dt = json.load(res)["utc_datetime"].split(".")[0].replace("T", " ")
+                if self.run_raw_sync(f"sudo date -s '{dt}'"):
+                    self.run_raw_sync("sudo hwclock --systohc -f /dev/rtc")
+                    self.log(f"Sync Success: {dt}"); self.refresh_rtc_display()
+            except Exception as e: self.log(f"Sync Fail: {e}")
         threading.Thread(target=_task, daemon=True).start()
 
     def refresh_rtc_display(self):
         with self.cmd_lock:
             try:
-                # Use -r instead of --show for compatibility
-                v = subprocess.check_output("sudo hwclock -r -f /dev/rtc", shell=True, text=True).split('.')[0].strip()
+                v = subprocess.check_output("sudo hwclock --show -f /dev/rtc", shell=True, text=True).split('.')[0].strip()
                 self.rtc_time.set(v)
             except: self.rtc_time.set("Err")
     
@@ -214,30 +195,18 @@ class ControlPanelV4:
             subprocess.run("killall -q speaker-test", shell=True)
             if nxt != "off":
                 f = 400 if nxt == "400Hz" else 1000
-                if IS_PI: 
-                    try:
-                        GPIO.setup(13, GPIO.OUT)
-                        self._pi_pwm = GPIO.PWM(13, f)
-                        self._pi_pwm.start(50)
-                    except: pass
+                if IS_PI: GPIO.setup(13, GPIO.OUT); self._pi_pwm = GPIO.PWM(13, f); self._pi_pwm.start(50)
                 else: self._beep_proc = subprocess.Popen(f"speaker-test -t sine -f {f} -c 2", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             self.log(f"Beeper: {nxt}")
         self.bg_task(_task)
 
-    def toggle_pwr1(self): self.bg_task(lambda: (self.pwr1.set(not self.pwr1.get()), GPIO.setup(26, GPIO.OUT), GPIO.output(26, self.pwr1.get()), self.log(f"PWR 1: {'ON' if self.pwr1.get() else 'OFF'}")))
-    def toggle_pwr2(self): self.bg_task(lambda: (self.pwr2.set(not self.pwr2.get()), GPIO.setup(22, GPIO.OUT), GPIO.output(22, self.pwr2.get()), self.log(f"PWR 2: {'ON' if self.pwr2.get() else 'OFF'}")))
+    def toggle_pwr1(self): self.bg_task(lambda: (self.pwr1.set(not self.pwr1.get()), GPIO.setup(26, GPIO.OUT), GPIO.output(26, self.pwr1.get()), self.log("PWR 1 cycle")))
+    def toggle_pwr2(self): self.bg_task(lambda: (self.pwr2.set(not self.pwr2.get()), GPIO.setup(22, GPIO.OUT), GPIO.output(22, self.pwr2.get()), self.log("PWR 2 cycle")))
     
-    def set_gpio_mode(self, p, m): 
-        try:
-            GPIO.setup(p, GPIO.IN if m=="IN" else GPIO.OUT)
-            self.log(f"Pin P{p} -> {m}")
-        except: self.log(f"Pin P{p} mode fail")
-
+    def set_gpio_mode(self, p, m): GPIO.setup(p, GPIO.IN if m=="IN" else GPIO.OUT); self.log(f"Pin P{p} -> {m}")
     def set_gpio_level(self, p, l): 
-        try: 
-            GPIO.output(p, l)
-            self.log(f"Pin P{p} -> {l}")
-        except: self.log(f"P{p} output fail")
+        try: GPIO.output(p, l); self.log(f"Pin P{p} -> {l}")
+        except: self.log(f"P{p} fail")
 
     def start_loops(self):
         def _clock():
@@ -258,17 +227,12 @@ class ControlPanelV4:
             while True:
                 if hasattr(self, 'nb') and self.nb.index("current") == 2:
                     for p, el in self.gpio_elements.items():
-                        try: 
-                            c = "#0f0" if GPIO.input(p) else "#f00"
-                            el["led"].itemconfig(el["obj"], fill=c)
+                        try: c = "#0f0" if GPIO.input(p) else "#f00"; el["led"].itemconfig(el["obj"], fill=c)
                         except: pass
                 time.sleep(1)
         threading.Thread(target=_poll, daemon=True).start()
 
-    def run_modem_cmd(self, args):
-        cmd_str = " ".join(args)
-        self.run_bg(cmd_str)
-
+    def run_modem_cmd(self, args): self.bg_task(lambda: self.log(f"Action: {args}"))
     def on_closing(self):
         if self._pi_pwm: self._pi_pwm.stop()
         if self._beep_proc: self._beep_proc.kill()
