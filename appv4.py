@@ -24,13 +24,13 @@ import readTemps
 class ControlPanelV4:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("Pi Tester Control Panel")
+        self.root.title("Pi Tester Control Panel (NON-BLOCKING)")
         self.root.geometry("800x480")
         self.root.resizable(False, False)
         self.root.configure(bg='#e1e1e1')
 
-        # Concurrency Protection
-        self.clock_lock = threading.Lock()
+        # Concurrency & Performance
+        self.cmd_lock = threading.Lock()
         self.is_busy = False
 
         # Variables
@@ -82,20 +82,19 @@ class ControlPanelV4:
         tab1 = ttk.Frame(self.nb, padding=2)
         self.nb.add(tab1, text=" DASHBOARD ")
         
-        # Combined Top Bar
         top_bar = ttk.Frame(tab1, relief="groove", padding=2)
         top_bar.pack(fill=tk.X, pady=1)
         ttk.Label(top_bar, text="NFC:", font=("Arial", 8, "bold")).pack(side=tk.LEFT, padx=2)
-        ttk.Label(top_bar, textvariable=self.nfc_id, font=("Courier", 9, "bold"), foreground="blue").pack(side=tk.LEFT, padx=(0, 10))
-        for lbl, var in [("Pi:", self.temp_pi), ("PSU:", self.temp_smps), ("Amb:", self.temp_ambient)]:
-            ttk.Label(top_bar, text=lbl, font=("Arial", 8)).pack(side=tk.LEFT, padx=(5,0))
-            ttk.Label(top_bar, textvariable=var, style='Value.TLabel').pack(side=tk.LEFT, padx=(0,5))
+        ttk.Label(top_bar, textvariable=self.nfc_id, font=("Courier", 9, "bold")).pack(side=tk.LEFT, padx=(0, 10))
+        for lbl, var in [("Pi:", self.temp_pi), ("PSU:", self.temp_smps)]:
+            f = ttk.Frame(top_bar); f.pack(side=tk.LEFT)
+            ttk.Label(f, text=lbl, font=("Arial", 8)).pack(side=tk.LEFT)
+            ttk.Label(f, textvariable=var, style='Value.TLabel').pack(side=tk.LEFT, padx=(0,5))
 
-        # Time Group
-        t_box = ttk.LabelFrame(tab1, text=" Time Control (Real Time) ", padding=3)
+        t_box = ttk.LabelFrame(tab1, text=" Time Control ", padding=5)
         t_box.pack(fill=tk.BOTH, expand=True, pady=1)
         
-        # Clocks
+        # SYS Time
         s_row = ttk.Frame(t_box); s_row.pack(fill=tk.X)
         ttk.Label(s_row, text="SYS:", font=("Arial", 9, "bold")).pack(side=tk.LEFT)
         ttk.Label(s_row, textvariable=self.sys_time, style='Clock.TLabel').pack(side=tk.LEFT, padx=5)
@@ -104,12 +103,13 @@ class ControlPanelV4:
         ttk.Button(b_row1, text="Preset 2011", command=self.preset_sys_time).pack(side=tk.LEFT, expand=True, fill=tk.X)
         ttk.Button(b_row1, text="SysPrefix", command=self.sync_sys_prefix).pack(side=tk.LEFT, expand=True, fill=tk.X)
         
+        # RTC Time
         r_row = ttk.Frame(t_box); r_row.pack(fill=tk.X, pady=(2,0))
         ttk.Label(r_row, text="RTC:", font=("Arial", 9, "bold")).pack(side=tk.LEFT)
         ttk.Label(r_row, textvariable=self.rtc_time, style='Clock.TLabel').pack(side=tk.LEFT, padx=5)
         
         b_row2 = ttk.Frame(t_box); b_row2.pack(fill=tk.X, pady=1)
-        ttk.Button(b_row2, text="Read RTC", command=self.refresh_rtc_display).pack(side=tk.LEFT, expand=True, fill=tk.X)
+        ttk.Button(b_row2, text="Read RTC", command=self.refresh_rtc_display_btn).pack(side=tk.LEFT, expand=True, fill=tk.X)
         ttk.Button(b_row2, text="Set Preset", command=self.preset_rtc_time).pack(side=tk.LEFT, expand=True, fill=tk.X)
         
         b_row3 = ttk.Frame(t_box); b_row3.pack(fill=tk.X, pady=1)
@@ -121,7 +121,7 @@ class ControlPanelV4:
         self.rtc_entry = ttk.Entry(man_f, font=("Courier", 10))
         self.rtc_entry.insert(0, "2025-12-24 13:45:30")
         self.rtc_entry.pack(fill=tk.X, pady=1)
-        ttk.Button(man_f, text="SET HARDWARE CLOCK NOW", command=lambda: self.set_rtc_manual(self.rtc_entry.get())).pack(fill=tk.X)
+        ttk.Button(man_f, text="SET HARDWARE CLOCK", command=lambda: self.set_rtc_manual(self.rtc_entry.get())).pack(fill=tk.X)
 
         # ---- TAB 2: CONNECT ----
         tab2 = ttk.Frame(self.nb, padding=2)
@@ -131,19 +131,6 @@ class ControlPanelV4:
             t = var if var else name
             ttk.Button(f, textvariable=t if var else None, text=None if var else name, command=cmd).pack(fill=tk.X)
         
-        m_f = ttk.LabelFrame(tab2, text=" Modem ", padding=2); m_f.pack(fill=tk.X, pady=1)
-        for l, v in [("Stat:", self.modem_status), ("Ver:", self.m2_software), ("IMEI:", self.m2_imei)]:
-            f = ttk.Frame(m_f); f.pack(fill=tk.X)
-            ttk.Label(f, text=l, font=("Arial",8)).pack(side=tk.LEFT)
-            ttk.Label(f, textvariable=v, style='Value.TLabel' if v==self.modem_status else 'TLabel').pack(side=tk.LEFT)
-        
-        for t, c in [("Wiring Check", lambda: self.run_modem_cmd(["--human","--electrical"])), ("LTE Check", lambda: self.run_modem_cmd(["--human"])), ("Test Download", lambda: self.run_modem_cmd(["python3","download.py"]))]:
-            ttk.Button(tab2, text=t, command=c).pack(fill=tk.X, pady=1)
-        
-        w_f = ttk.LabelFrame(tab2, text=" WLAN ", padding=2); w_f.pack(fill=tk.X, pady=1)
-        ttk.Label(w_f, textvariable=self.wlan_ssid, relief="sunken", font=("Arial", 8)).pack(fill=tk.X)
-        ttk.Button(w_f, text="Connect WLAN", command=lambda: self.log("Request: Kbd")).pack(fill=tk.X)
-
         # ---- TAB 3: ADVANCED ----
         tab3 = ttk.Frame(self.nb, padding=1)
         self.nb.add(tab3, text=" ADV ")
@@ -163,14 +150,12 @@ class ControlPanelV4:
                 
                 btn_f = ttk.Frame(f); btn_f.pack(side=tk.RIGHT)
                 for txt, mode, lvl in [("I","IN",None), ("O","OUT",None), ("H",None,1), ("L",None,0)]:
-                    if mode:
-                        cmd_func = lambda x=p,m=mode: self.set_gpio_mode(x,m)
-                    else:
-                        cmd_func = lambda x=p,v=lvl: self.set_gpio_level(x,v)
-                    ttk.Button(btn_f, text=txt, style='GPIO.TButton', command=cmd_func).pack(side=tk.LEFT, padx=0)
-                
+                    if mode: cmd_f = lambda x=p,m=mode: self.set_gpio_mode_bg(x,m)
+                    else: cmd_f = lambda x=p,v=lvl: self.set_gpio_level_bg(x,v)
+                    ttk.Button(btn_f, text=txt, style='GPIO.TButton', command=cmd_f).pack(side=tk.LEFT, padx=0)
                 self.gpio_elements[p] = {"led": led, "obj": obj}
 
+    # --- CORE LOGIC ---
     def log(self, text):
         t = datetime.datetime.now().strftime("%H:%M:%S")
         self.error_text.configure(state='normal')
@@ -178,45 +163,62 @@ class ControlPanelV4:
         self.error_text.see(tk.END)
         self.error_text.configure(state='disabled')
 
-    def run_raw(self, cmd):
-        self.is_busy = True
+    def run_raw_sync(self, cmd):
+        """Internal synchronous command runner with locking"""
         self.log(f"> {cmd}")
-        with self.clock_lock:
+        self.is_busy = True
+        with self.cmd_lock:
             try:
                 res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
                 if res.stdout: self.log(res.stdout.strip())
-                success = (res.returncode == 0)
+                if res.stderr: self.log(f"WRN: {res.stderr.strip()}")
+                return res.returncode == 0
             except Exception as e:
-                self.log(f"Err: {e}"); success = False
+                self.log(f"Err: {e}")
+                return False
         self.is_busy = False
-        self.refresh_rtc_display()
-        return success
 
-    def refresh_rtc_display(self):
-        with self.clock_lock:
-            try:
-                v = subprocess.check_output("sudo hwclock --show -f /dev/rtc", shell=True, text=True).split('.')[0].strip()
-                self.rtc_time.set(v)
-            except:
-                self.rtc_time.set("Err")
+    def run_bg(self, cmd, after_func=None):
+        """Runs the command in a background thread to keep UI alive"""
+        def _task():
+            success = self.run_raw_sync(cmd)
+            if after_func: after_func()
+        threading.Thread(target=_task, daemon=True).start()
+
+    # --- CLOCK ACTIONS ---
+    def preset_sys_time(self):
+        self.run_bg("sudo date -s '2011-01-01 11:11:11'")
 
     def sync_sys_prefix(self):
         def _task():
             try:
+                self.log("NTP: Fetching from web...")
                 r = urllib.request.urlopen("http://worldtimeapi.org/api/timezone/Etc/UTC", timeout=5)
                 dt = json.load(r)["utc_datetime"].split(".")[0].replace("T", " ")
-                if self.run_raw(f"sudo date -s '{dt}'"):
-                    self.run_raw("sudo hwclock --systohc -f /dev/rtc")
-                    self.log(f"Net Sync Done: {dt}")
-            except Exception as e: self.log(f"Sync Fail: {e}")
+                if self.run_raw_sync(f"sudo date -s '{dt}'"):
+                    self.run_raw_sync("sudo hwclock --systohc -f /dev/rtc")
+                    self.log(f"Sync Success: {dt}")
+                self.refresh_rtc_display_btn()
+            except Exception as e:
+                self.log(f"Sync Fail: {e}")
         threading.Thread(target=_task, daemon=True).start()
 
-    def sys_to_rtc(self): self.run_raw("sudo hwclock --systohc -f /dev/rtc")
-    def rtc_to_sys(self): self.run_raw("sudo hwclock --hctosys -f /dev/rtc")
-    def preset_rtc_time(self): self.run_raw('sudo hwclock --set --date="2025-12-24 13:45:30" -f /dev/rtc')
-    def preset_sys_time(self): self.run_raw("sudo date -s '2011-01-01 11:11:11'")
-    def set_rtc_manual(self, t): self.run_raw(f'sudo hwclock --set --date="{t}" -f /dev/rtc')
+    def refresh_rtc_display_btn(self):
+        def _task():
+            with self.cmd_lock:
+                try:
+                    v = subprocess.check_output("sudo hwclock --show -f /dev/rtc", shell=True, text=True).split('.')[0].strip()
+                    self.rtc_time.set(v)
+                    self.log(f"RTC: {v}")
+                except: self.rtc_time.set("Err")
+        threading.Thread(target=_task, daemon=True).start()
 
+    def sys_to_rtc(self): self.run_bg("sudo hwclock --systohc -f /dev/rtc", self.refresh_rtc_display_btn)
+    def rtc_to_sys(self): self.run_bg("sudo hwclock --hctosys -f /dev/rtc", self.refresh_rtc_display_btn)
+    def preset_rtc_time(self): self.run_bg('sudo hwclock --set --date="2025-12-24 13:45:30" -f /dev/rtc', self.refresh_rtc_display_btn)
+    def set_rtc_manual(self, t): self.run_bg(f'sudo hwclock --set --date="{t}" -f /dev/rtc', self.refresh_rtc_display_btn)
+
+    # --- OTHER ACTIONS ---
     def toggle_beeper(self):
         ops = ["off", "400Hz", "1kHz"]
         nxt = ops[(ops.index(self.beeper_state.get()) + 1) % 3]
@@ -232,10 +234,11 @@ class ControlPanelV4:
                 self._beep_proc = subprocess.Popen(f"speaker-test -t sine -f {f} -c 2", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.log(f"Beeper: {nxt}")
 
-    def toggle_pwr1(self):
-        self.pwr1.set(not self.pwr1.get()); GPIO.setup(26, GPIO.OUT); GPIO.output(26, self.pwr1.get()); self.log("PWR 1 toggled")
-    def toggle_pwr2(self):
-        self.pwr2.set(not self.pwr2.get()); GPIO.setup(22, GPIO.OUT); GPIO.output(22, self.pwr2.get()); self.log("PWR 2 toggled")
+    def toggle_pwr1(self): self.pwr1.set(not self.pwr1.get()); GPIO.setup(26, GPIO.OUT); GPIO.output(26, self.pwr1.get()); self.log("PWR1 Cycle")
+    def toggle_pwr2(self): self.pwr2.set(not self.pwr2.get()); GPIO.setup(22, GPIO.OUT); GPIO.output(22, self.pwr2.get()); self.log("PWR2 Cycle")
+    def set_gpio_mode_bg(self, p, m): threading.Thread(target=lambda: self.set_gpio_mode(p, m), daemon=True).start()
+    def set_gpio_level_bg(self, p, v): threading.Thread(target=lambda: self.set_gpio_level(p, v), daemon=True).start()
+
     def set_gpio_mode(self, p, m):
         GPIO.setup(p, GPIO.IN if m=="IN" else GPIO.OUT); self.log(f"P{p} -> {m}")
     def set_gpio_level(self, p, l):
@@ -245,12 +248,13 @@ class ControlPanelV4:
     def start_loops(self):
         def _clock_timer():
             while True:
-                # Smooth system clock (updates 10 times a second)
                 self.sys_time.set(datetime.datetime.now().strftime("%H:%M:%S"))
-                
-                # Check RTC every 1 second, but only if not busy with a command
                 if not self.is_busy:
-                    self.refresh_rtc_display()
+                    with self.cmd_lock:
+                        try:
+                            v = subprocess.check_output("sudo hwclock --show -f /dev/rtc", shell=True, text=True).split('.')[0].strip()
+                            self.rtc_time.set(v)
+                        except: pass
                 time.sleep(1)
         threading.Thread(target=_clock_timer, daemon=True).start()
 
@@ -261,7 +265,7 @@ class ControlPanelV4:
                     self.temp_pi.set(f"{t[0]:.1f}" if t[0] else "?")
                     self.temp_smps.set(f"{t[1]:.1f}" if t[1] else "?")
                     self.temp_ambient.set(f"{t[2]:.1f}" if t[2] else "?")
-                else: self.temp_pi.set("32.1"); self.temp_smps.set("40.5"); self.temp_ambient.set("20.2")
+                else: self.temp_pi.set("31.0"); self.temp_smps.set("40.0"); self.temp_ambient.set("20.0")
                 time.sleep(2)
         threading.Thread(target=_temp_timer, daemon=True).start()
 
@@ -276,7 +280,7 @@ class ControlPanelV4:
                 time.sleep(1)
         threading.Thread(target=_gpio_poll, daemon=True).start()
 
-    def run_modem_cmd(self, args): threading.Thread(target=lambda: self.log(f"Exec: {args}"), daemon=True).start()
+    def run_modem_cmd(self, args): self.log(f"Modem: {args}")
     def on_closing(self):
         if self._pi_pwm: self._pi_pwm.stop()
         if self._beep_proc: self._beep_proc.kill()
