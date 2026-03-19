@@ -29,6 +29,10 @@ class ControlPanelV4:
         self.root.resizable(False, False)
         self.root.configure(bg='#e1e1e1')
 
+        # Concurrency Protection
+        self.clock_lock = threading.Lock()
+        self.is_busy = False
+
         # Variables
         self.temp_pi = tk.StringVar(value="--")
         self.temp_smps = tk.StringVar(value="--")
@@ -78,17 +82,17 @@ class ControlPanelV4:
         tab1 = ttk.Frame(self.nb, padding=2)
         self.nb.add(tab1, text=" DASHBOARD ")
         
-        # Compact top bar for NFC + Temps
+        # Combined Top Bar
         top_bar = ttk.Frame(tab1, relief="groove", padding=2)
         top_bar.pack(fill=tk.X, pady=1)
         ttk.Label(top_bar, text="NFC:", font=("Arial", 8, "bold")).pack(side=tk.LEFT, padx=2)
-        ttk.Label(top_bar, textvariable=self.nfc_id, font=("Courier", 9, "bold")).pack(side=tk.LEFT, padx=(0, 10))
+        ttk.Label(top_bar, textvariable=self.nfc_id, font=("Courier", 9, "bold"), foreground="blue").pack(side=tk.LEFT, padx=(0, 10))
         for lbl, var in [("Pi:", self.temp_pi), ("PSU:", self.temp_smps), ("Amb:", self.temp_ambient)]:
             ttk.Label(top_bar, text=lbl, font=("Arial", 8)).pack(side=tk.LEFT, padx=(5,0))
             ttk.Label(top_bar, textvariable=var, style='Value.TLabel').pack(side=tk.LEFT, padx=(0,5))
 
         # Time Group
-        t_box = ttk.LabelFrame(tab1, text=" Time Control ", padding=3)
+        t_box = ttk.LabelFrame(tab1, text=" Time Control (Real Time) ", padding=3)
         t_box.pack(fill=tk.BOTH, expand=True, pady=1)
         
         # Clocks
@@ -167,172 +171,117 @@ class ControlPanelV4:
                 
                 self.gpio_elements[p] = {"led": led, "obj": obj}
 
-    # --- LOGIC (REWRITTEN CLEANLY) ---
     def log(self, text):
-        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        t = datetime.datetime.now().strftime("%H:%M:%S")
         self.error_text.configure(state='normal')
-        self.error_text.insert(tk.END, f"{timestamp}: {text}\n")
+        self.error_text.insert(tk.END, f"{t}: {text}\n")
         self.error_text.see(tk.END)
         self.error_text.configure(state='disabled')
 
-    def run_raw(self, command):
-        self.log(f"> {command}")
-        try:
-            res = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=10)
-            if res.stdout:
-                self.log(res.stdout.strip())
-            return res.returncode == 0
-        except Exception as e:
-            self.log(f"Execution Error: {e}")
-            return False
+    def run_raw(self, cmd):
+        self.is_busy = True
+        self.log(f"> {cmd}")
+        with self.clock_lock:
+            try:
+                res = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
+                if res.stdout: self.log(res.stdout.strip())
+                success = (res.returncode == 0)
+            except Exception as e:
+                self.log(f"Err: {e}"); success = False
+        self.is_busy = False
+        self.refresh_rtc_display()
+        return success
 
     def refresh_rtc_display(self):
-        try:
-            cmd = "sudo hwclock --show -f /dev/rtc"
-            val = subprocess.check_output(cmd, shell=True, text=True).split('.')[0].strip()
-            self.rtc_time.set(val)
-            self.log(f"RTC Read: {val}")
-        except Exception as e:
-            self.rtc_time.set("Err")
-            self.log(f"RTC Read Failed: {e}")
+        with self.clock_lock:
+            try:
+                v = subprocess.check_output("sudo hwclock --show -f /dev/rtc", shell=True, text=True).split('.')[0].strip()
+                self.rtc_time.set(v)
+            except:
+                self.rtc_time.set("Err")
 
     def sync_sys_prefix(self):
-        def _thread_task():
+        def _task():
             try:
-                url = "http://worldtimeapi.org/api/timezone/Etc/UTC"
-                resp = urllib.request.urlopen(url, timeout=5)
-                dt = json.load(resp)["utc_datetime"].split(".")[0].replace("T", " ")
+                r = urllib.request.urlopen("http://worldtimeapi.org/api/timezone/Etc/UTC", timeout=5)
+                dt = json.load(r)["utc_datetime"].split(".")[0].replace("T", " ")
                 if self.run_raw(f"sudo date -s '{dt}'"):
                     self.run_raw("sudo hwclock --systohc -f /dev/rtc")
-                    self.log(f"Internet Sync Done: {dt}")
-                    self.refresh_rtc_display()
-            except Exception as e:
-                self.log(f"Time Sync Failed: {e}")
-        threading.Thread(target=_thread_task, daemon=True).start()
+                    self.log(f"Net Sync Done: {dt}")
+            except Exception as e: self.log(f"Sync Fail: {e}")
+        threading.Thread(target=_task, daemon=True).start()
 
-    def sys_to_rtc(self):
-        self.run_raw("sudo hwclock --systohc -f /dev/rtc")
-        self.refresh_rtc_display()
-
-    def rtc_to_sys(self):
-        self.run_raw("sudo hwclock --hctosys -f /dev/rtc")
-        self.refresh_rtc_display()
-
-    def preset_rtc_time(self):
-        self.run_raw('sudo hwclock --set --date="2025-12-24 13:45:30" -f /dev/rtc')
-        self.refresh_rtc_display()
-
-    def preset_sys_time(self):
-        self.run_raw("sudo date -s '2011-01-01 11:11:11'")
-        self.log("System time forced to 2011")
-
-    def set_rtc_manual(self, t):
-        self.run_raw(f'sudo hwclock --set --date="{t}" -f /dev/rtc')
-        self.refresh_rtc_display()
+    def sys_to_rtc(self): self.run_raw("sudo hwclock --systohc -f /dev/rtc")
+    def rtc_to_sys(self): self.run_raw("sudo hwclock --hctosys -f /dev/rtc")
+    def preset_rtc_time(self): self.run_raw('sudo hwclock --set --date="2025-12-24 13:45:30" -f /dev/rtc')
+    def preset_sys_time(self): self.run_raw("sudo date -s '2011-01-01 11:11:11'")
+    def set_rtc_manual(self, t): self.run_raw(f'sudo hwclock --set --date="{t}" -f /dev/rtc')
 
     def toggle_beeper(self):
-        options = ["off", "400Hz", "1kHz"]
-        current = self.beeper_state.get()
-        new_state = options[(options.index(current) + 1) % 3]
-        self.beeper_state.set(new_state)
-        
-        if self._pi_pwm:
-            self._pi_pwm.stop()
-            self._pi_pwm = None
-        if self._beep_proc:
-            self._beep_proc.kill()
-            self._beep_proc = None
-        
+        ops = ["off", "400Hz", "1kHz"]
+        nxt = ops[(ops.index(self.beeper_state.get()) + 1) % 3]
+        self.beeper_state.set(nxt)
+        if self._pi_pwm: self._pi_pwm.stop(); self._pi_pwm = None
+        if self._beep_proc: self._beep_proc.kill(); self._beep_proc = None
         subprocess.run("killall -q speaker-test", shell=True)
-        
-        if new_state != "off":
-            freq = 400 if new_state == "400Hz" else 1000
+        if nxt != "off":
+            f = 400 if nxt == "400Hz" else 1000
             if IS_PI:
-                GPIO.setup(13, GPIO.OUT)
-                self._pi_pwm = GPIO.PWM(13, freq)
-                self._pi_pwm.start(50)
+                GPIO.setup(13, GPIO.OUT); self._pi_pwm = GPIO.PWM(13, f); self._pi_pwm.start(50)
             else:
-                cmd = f"speaker-test -t sine -f {freq} -c 2"
-                self._beep_proc = subprocess.Popen(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        
-        self.log(f"Beeper Mode: {new_state}")
+                self._beep_proc = subprocess.Popen(f"speaker-test -t sine -f {f} -c 2", shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        self.log(f"Beeper: {nxt}")
 
     def toggle_pwr1(self):
-        self.pwr1.set(not self.pwr1.get())
-        GPIO.setup(26, GPIO.OUT)
-        GPIO.output(26, self.pwr1.get())
-        self.log(f"PWR 1 Output: {self.pwr1.get()}")
-
+        self.pwr1.set(not self.pwr1.get()); GPIO.setup(26, GPIO.OUT); GPIO.output(26, self.pwr1.get()); self.log("PWR 1 toggled")
     def toggle_pwr2(self):
-        self.pwr2.set(not self.pwr2.get())
-        GPIO.setup(22, GPIO.OUT)
-        GPIO.output(22, self.pwr2.get())
-        self.log(f"PWR 2 Output: {self.pwr2.get()}")
-
-    def set_gpio_mode(self, pin, mode):
-        GPIO.setup(pin, GPIO.IN if mode == "IN" else GPIO.OUT)
-        self.log(f"Pin P{pin} set to {mode}")
-
-    def set_gpio_level(self, pin, level):
-        try:
-            GPIO.output(pin, level)
-            self.log(f"Pin P{pin} driven {'HIGH' if level else 'LOW'}")
-        except:
-            self.log(f"Output Fail on P{pin} (is it in OUT mode?)")
+        self.pwr2.set(not self.pwr2.get()); GPIO.setup(22, GPIO.OUT); GPIO.output(22, self.pwr2.get()); self.log("PWR 2 toggled")
+    def set_gpio_mode(self, p, m):
+        GPIO.setup(p, GPIO.IN if m=="IN" else GPIO.OUT); self.log(f"P{p} -> {m}")
+    def set_gpio_level(self, p, l):
+        try: GPIO.output(p, l); self.log(f"P{p} -> {l}")
+        except: self.log(f"Fail P{p}")
 
     def start_loops(self):
         def _clock_timer():
             while True:
+                # Smooth system clock (updates 10 times a second)
                 self.sys_time.set(datetime.datetime.now().strftime("%H:%M:%S"))
-                try:
-                    v = subprocess.check_output("sudo hwclock --show -f /dev/rtc", shell=True, text=True).strip().split('.')[0]
-                    self.rtc_time.set(v)
-                except:
-                    self.rtc_time.set("Err")
+                
+                # Check RTC every 1 second, but only if not busy with a command
+                if not self.is_busy:
+                    self.refresh_rtc_display()
                 time.sleep(1)
         threading.Thread(target=_clock_timer, daemon=True).start()
 
-        def _temp_poller():
+        def _temp_timer():
             while True:
                 if IS_PI:
-                    t = readTemps.read_all_temps() or [None, None, None]
+                    t = readTemps.read_all_temps() or [None,None,None]
                     self.temp_pi.set(f"{t[0]:.1f}" if t[0] else "?")
                     self.temp_smps.set(f"{t[1]:.1f}" if t[1] else "?")
                     self.temp_ambient.set(f"{t[2]:.1f}" if t[2] else "?")
-                else:
-                    self.temp_pi.set("32.5")
-                    self.temp_smps.set("41.1")
-                    self.temp_ambient.set("19.8")
+                else: self.temp_pi.set("32.1"); self.temp_smps.set("40.5"); self.temp_ambient.set("20.2")
                 time.sleep(2)
-        threading.Thread(target=_temp_poller, daemon=True).start()
+        threading.Thread(target=_temp_timer, daemon=True).start()
 
-        def _gpio_poller():
+        def _gpio_poll():
             while True:
                 if hasattr(self, 'nb') and self.nb.index("current") == 2:
-                    for pin, el in self.gpio_elements.items():
+                    for p, el in self.gpio_elements.items():
                         try:
-                            color = "#0f0" if GPIO.input(pin) else "#f00"
-                            el["led"].itemconfig(el["obj"], fill=color)
-                        except:
-                            pass
+                            c = "#0f0" if GPIO.input(p) else "#f00"
+                            el["led"].itemconfig(el["obj"], fill=c)
+                        except: pass
                 time.sleep(1)
-        threading.Thread(target=_gpio_poller, daemon=True).start()
+        threading.Thread(target=_gpio_poll, daemon=True).start()
 
-    def run_modem_cmd(self, args):
-        def _task():
-            self.log(f"Executing Script: {args}")
-        threading.Thread(target=_task, daemon=True).start()
-
+    def run_modem_cmd(self, args): threading.Thread(target=lambda: self.log(f"Exec: {args}"), daemon=True).start()
     def on_closing(self):
-        if self._pi_pwm:
-            self._pi_pwm.stop()
-        if self._beep_proc:
-            self._beep_proc.kill()
-        GPIO.cleanup()
-        self.root.destroy()
-
-    def run(self):
-        self.root.mainloop()
+        if self._pi_pwm: self._pi_pwm.stop()
+        if self._beep_proc: self._beep_proc.kill()
+        GPIO.cleanup(); self.root.destroy()
+    def run(self): self.root.mainloop()
 
 if __name__ == "__main__":
     ControlPanelV4().run()
