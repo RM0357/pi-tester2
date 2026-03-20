@@ -20,7 +20,11 @@ def read_temp(address):
     try:
         data = bus.read_i2c_block_data(address, 0x00, 2)
         raw = (data[0] << 8) | data[1]
-        temp_c = (raw >> 4) * 0.0625
+        val = raw >> 4
+        # Handle 12-bit sign bit (bit 11 is the sign)
+        if val & 0x800:
+            val -= 0x1000
+        temp_c = val * 0.0625
         return round(temp_c, 2)
     except Exception:
         return None

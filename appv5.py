@@ -126,7 +126,6 @@ class ControlPanelV5:
         
         rr = ttk.Frame(t_box); rr.pack(fill=tk.X, pady=(2,0)); ttk.Label(rr, text="RTC:", font=("Arial", 9, "bold")).pack(side=tk.LEFT); ttk.Label(rr, textvariable=self.rtc_time, style='Clock.TLabel').pack(side=tk.LEFT, padx=3)
         br2 = ttk.Frame(t_box); br2.pack(fill=tk.X, pady=1)
-        ttk.Button(br2, text="Read RTC", command=self.refresh_rtc_btn).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
         ttk.Button(br2, text="Set Preset", command=lambda: self.run_bg('sudo hwclock --set --date="2025-12-24 13:45:30" -f /dev/rtc', self.refresh_rtc_display)).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
         
         br3 = ttk.Frame(t_box); br3.pack(fill=tk.X, pady=1)
@@ -292,7 +291,8 @@ class ControlPanelV5:
     # --- OTHER METHODS ---
     def sync_sys_prefix(self):
         def _task():
-            urls = ["https://worldtimeapi.org/api/timezone/Etc/UTC", "https://timeapi.io/api/Time/current/zone?timeZone=UTC"]
+            # Use HTTP instead of HTTPS to avoid certificate validation issues when time is wrong
+            urls = ["http://worldtimeapi.org/api/timezone/Etc/UTC", "http://timeapi.io/api/Time/current/zone?timeZone=UTC"]
             for url in urls:
                 try:
                     self.log(f"Sync: Querying {url.split('/')[2]}...")
@@ -303,8 +303,8 @@ class ControlPanelV5:
                         if dt:
                             dt = dt.split(".")[0].replace("T", " ")
                             if self.run_raw_sync(f"sudo date -s '{dt}'"):
-                                self.run_raw_sync("sudo hwclock --systohc -f /dev/rtc")
-                                self.log(f"Sync Success: {dt}"); self.refresh_rtc_display(); return
+                                # We only update system time here, not hardware clock (RTC)
+                                self.log(f"Sync Success: {dt}"); return
                 except Exception as e: self.log(f"Sync attempt failed: {e}")
             self.log("Sync Fail: All sources exhausted.")
         threading.Thread(target=_task, daemon=True).start()
@@ -371,7 +371,7 @@ class ControlPanelV5:
     def start_loops(self):
         def _clock():
             while True:
-                self.sys_time.set(datetime.datetime.now().strftime("%H:%M:%S"))
+                self.sys_time.set(datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
                 if not self.is_busy: self.refresh_rtc_display()
                 time.sleep(1)
         threading.Thread(target=_clock, daemon=True).start()
@@ -379,7 +379,9 @@ class ControlPanelV5:
             while True:
                 if IS_PI:
                     t = readTemps.read_all_temps() or [None,None,None]
-                    self.temp_pi.set(f"{t[0]:.1f}" if t[0] else "?"); self.temp_smps.set(f"{t[1]:.1f}" if t[1] else "?"); self.temp_ambient.set(f"{t[2]:.1f}" if t[2] else "?")
+                    self.temp_pi.set(f"{t[0]:.1f}" if t[0] else "?")
+                    self.temp_smps.set(f"{t[2]:.1f}" if t[2] else "?") # Swapped with Ambient
+                    self.temp_ambient.set(f"{t[1]:.1f}" if t[1] else "?") # Swapped with PSU
                 else: self.temp_pi.set("30.0"); self.temp_smps.set("40.0"); self.temp_ambient.set("20.0")
                 time.sleep(2)
         threading.Thread(target=_temp, daemon=True).start()
