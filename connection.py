@@ -6,6 +6,7 @@ import time
 import serial
 import signal
 import subprocess
+import sys
 
 from termcolor import colored
 
@@ -53,7 +54,10 @@ def print_modem_tx(message):
 
 def print_modem_rx(message):
 	print("------------------------  RX  ------------------------\n  ", end="")
-	print(message.strip().replace('\r\n\r\n','\r\n').replace('\n','\n  '))
+	if not message or not message.strip():
+		print_error("!!! NO RESPONSE FROM MODEM !!!")
+	else:
+		print(message.strip().replace('\r\n\r\n','\r\n').replace('\n','\n  '))
 	print("------------------------------------------------------")
 
 
@@ -180,10 +184,13 @@ class SerialModem(object):
 		if not Command.startswith("at ") and self.Target == 'MOSH':
 			Command = f"at {Command}"
 		
-		if not Command.endswith("\r\n"):
-			Command = f"{Command}\r\n"
+		# Ensure correct termination
+		Command = Command.rstrip("\r\n") + "\r\n"
 		
-		return self.Send(Command)
+		res = self.Send(Command)
+		if not res or not res.strip():
+			print_error(f"Error: Command '{Command.strip()}' returned no data (Timeout).")
+		return res
 	
 	
 	def Config(self):
@@ -407,49 +414,57 @@ class SerialModem(object):
 
 class ConnectionManager(object):
 	
-	def __init__(self):
+	def __init__(self, folder=None, location="", card="", cable="", antenna=""):
 		'''Configure and open the serial port, init GPIOs, init attributes'''
 		
 		self.Shutdown= False
 		self.LastStart= time.time()
 		
-		# Todo: passt nicht ganz hierher, hier ist aber die Execute schon vorhanden... (Execute ganz auslagern?)
-		self.Execute( ["stty","-F","/dev/ttyUSB0","115200"] )
-		self.Execute( ["stty","-F","/dev/ttyUSB0","-echo","-onlcr"] )
-		
-		print("Init serial console")
-		self.Modem = SerialModem()
-		
 		print("Init GPIOs")
 		self.Pins = GPIOs()
 		
-		print("Start logfile\n")
+		# Allow for non-serial mode if needed, but normally we start here
+		print("Powering on M.2 Slot...")
+		self.Start()
+		time.sleep(2) # Wait for USB to enumerate
 		
-		folder= ""
-		while folder == "":
-			print("Folder name: ", end="")
-			folder= input().strip()
-			
-			if os.path.isdir(f"./{folder}"):
-				folder= ""
-			
+		# Todo: passt nicht ganz hierher, hier ist aber die Execute schon vorhanden... (Execute ganz auslagern?)
+		try:
+			self.Execute( ["stty","-F","/dev/ttyUSB0","115200"] )
+			self.Execute( ["stty","-F","/dev/ttyUSB0","-echo","-onlcr"] )
+		except: pass
+		
+		print("Init serial console")
+		try:
+			self.Modem = SerialModem()
+		except Exception as e:
+			print_error(f"Could not open serial port: {e}")
+			self.Modem = None # Handle missing modem gracefully
+		
+		if folder is None:
+			print("Start logfile\n")
+			while folder == "" or folder is None:
+				print("Folder name: ", end="")
+				folder= input().strip()
+				if os.path.isdir(f"./{folder}"):
+						folder= ""
+		
 		self.LogFolder = f"./{folder}"
+		if not os.path.exists(self.LogFolder):
+			os.mkdir(self.LogFolder)
 		
-		
-		os.mkdir(self.LogFolder)
-		
-		
-		print("Location: ", end="")
-		location= input().strip()
-		
-		print("M2 card:  ", end="")
-		card= input().strip()
-		
-		print("Cabel:    ", end="")
-		cable= input().strip()
-		
-		print("Antenna:  ", end="")
-		antenna= input().strip()
+		if not location:
+			print("Location: ", end="")
+			location= input().strip() if sys.stdin.isatty() else "LAB"
+		if not card:
+			print("M2 card:  ", end="")
+			card= input().strip() if sys.stdin.isatty() else "M2_MODEM"
+		if not cable:
+			print("Cabel:    ", end="")
+			cable= input().strip() if sys.stdin.isatty() else "USB"
+		if not antenna:
+			print("Antenna:  ", end="")
+			antenna= input().strip() if sys.stdin.isatty() else "INTERNAL"
 		
 		NotesFile = open( f"./{self.LogFolder}/notes.txt", 'w' )
 		NotesFile.write(f"Location: {location}\n")
@@ -457,7 +472,6 @@ class ConnectionManager(object):
 		NotesFile.write(f"Cabel:    {cable}\n")
 		NotesFile.write(f"Antenna:  {antenna}\n")
 		NotesFile.close()
-		
 		
 		self.LogFile= open( f"./{self.LogFolder}/values.csv", 'w' )
 		self.LogFile.write("Time,CFUN.fun,XCBAND.band,CESQ.rsrq,CESQ.rsrp,XMONITOR.reg_status\n")

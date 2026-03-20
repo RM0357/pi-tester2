@@ -50,6 +50,12 @@ class ControlPanelV5:
         self.m2_software = tk.StringVar(value="...")
         self.m2_imei = tk.StringVar(value="IMEI: ----")
         
+        self.lan_mac = tk.StringVar(value="--:--:--:--:--:--")
+        self.wlan_mac = tk.StringVar(value="--:--:--:--:--:--")
+        
+        self.pwr1_text = tk.StringVar(value="ON" if self.pwr1.get() else "OFF")
+        self.pwr2_text = tk.StringVar(value="ON" if self.pwr2.get() else "OFF")
+        
         self._beep_proc = None
         self._pi_pwm = None
 
@@ -65,6 +71,7 @@ class ControlPanelV5:
         self.style.configure('GPIO.TButton', font=('Arial', 12, 'bold'), width=2, padding=4)
         self.style.configure('Action.TButton', font=('Arial', 10, 'bold'), padding=5)
 
+        self.get_network_info()
         self.setup_ui()
         self.start_loops()
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -88,21 +95,33 @@ class ControlPanelV5:
         tab1 = ttk.Frame(self.nb, padding=2)
         self.nb.add(tab1, text=" DASHBOARD ")
         
-        top_bar = ttk.Frame(tab1, relief="groove", padding=2)
-        top_bar.pack(fill=tk.X, pady=1)
-        ttk.Label(top_bar, text="NFC:", font=("Arial", 8, "bold")).pack(side=tk.LEFT, padx=1)
-        ttk.Label(top_bar, textvariable=self.nfc_id, font=("Courier", 9, "bold"), foreground="blue").pack(side=tk.LEFT, padx=(0, 5))
-        for lbl, var in [("Pi:", self.temp_pi), ("PSU:", self.temp_smps), ("Amb:", self.temp_ambient)]:
-            f_tmp = ttk.Frame(top_bar); f_tmp.pack(side=tk.LEFT, padx=1)
-            ttk.Label(f_tmp, text=lbl, font=("Arial", 8)).pack(side=tk.LEFT)
-            ttk.Label(f_tmp, textvariable=var, style='Value.TLabel').pack(side=tk.LEFT, padx=1)
+        top_bar = ttk.Frame(tab1, relief="groove", padding=5)
+        top_bar.pack(fill=tk.X, pady=2)
+
+        # Row 1: Temperature Sensors
+        temp_row = ttk.Frame(top_bar)
+        temp_row.pack(fill=tk.X)
+        for lbl, var in [("Pi CPU:", self.temp_pi), ("PSU:", self.temp_smps), ("Ambient:", self.temp_ambient)]:
+            f_tmp = ttk.Frame(temp_row)
+            f_tmp.pack(side=tk.LEFT, padx=10, expand=True)
+            ttk.Label(f_tmp, text=lbl, font=("Arial", 9, "bold")).pack(side=tk.LEFT)
+            ttk.Label(f_tmp, textvariable=var, style='Value.TLabel').pack(side=tk.LEFT, padx=2)
+
+        # Separator for a cleaner look
+        ttk.Separator(top_bar, orient='horizontal').pack(fill=tk.X, pady=5)
+
+        # Row 2: NFC ID
+        nfc_row = ttk.Frame(top_bar)
+        nfc_row.pack(fill=tk.X)
+        ttk.Label(nfc_row, text="NFC ID:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(10, 5))
+        ttk.Label(nfc_row, textvariable=self.nfc_id, font=("Courier", 11, "bold"), foreground="#d9534f").pack(side=tk.LEFT)
 
         t_box = ttk.LabelFrame(tab1, text=" Time Control ", padding=3)
         t_box.pack(fill=tk.BOTH, expand=True, pady=1)
         
         sr = ttk.Frame(t_box); sr.pack(fill=tk.X); ttk.Label(sr, text="SYS:", font=("Arial", 9, "bold")).pack(side=tk.LEFT); ttk.Label(sr, textvariable=self.sys_time, style='Clock.TLabel').pack(side=tk.LEFT, padx=3)
         br1 = ttk.Frame(t_box); br1.pack(fill=tk.X, pady=1)
-        ttk.Button(br1, text="Preset 2011", command=lambda: self.run_bg("sudo date -s '2011-01-01 11:11:11'")).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
+        ttk.Button(br1, text="Preset.25", command=lambda: self.run_bg("sudo date -s '2025-05-05 05:05:05'")).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
         ttk.Button(br1, text="SysPrefix", command=self.sync_sys_prefix).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
         
         rr = ttk.Frame(t_box); rr.pack(fill=tk.X, pady=(2,0)); ttk.Label(rr, text="RTC:", font=("Arial", 9, "bold")).pack(side=tk.LEFT); ttk.Label(rr, textvariable=self.rtc_time, style='Clock.TLabel').pack(side=tk.LEFT, padx=3)
@@ -118,39 +137,54 @@ class ControlPanelV5:
         self.rtc_entry = ttk.Entry(man_f, font=("Courier", 10)); self.rtc_entry.insert(0, "2025-12-24 13:45:30"); self.rtc_entry.pack(fill=tk.X, pady=1)
         ttk.Button(man_f, text="SET HARDWARE CLOCK", command=lambda: self.run_bg(f'sudo hwclock --set --date="{self.rtc_entry.get()}" -f /dev/rtc', self.refresh_rtc_display)).pack(fill=tk.X)
 
-        # ---- TAB 2: TESTER (NEW) ----
-        tab_tester = ttk.Frame(self.nb, padding=5)
+        # ---- TAB 2: TESTER ----
+        tab_tester = ttk.Frame(self.nb, padding=10)
         self.nb.add(tab_tester, text=" TESTER ")
         
-        tester_inner = ttk.Frame(tab_tester)
-        tester_inner.pack(fill=tk.BOTH, expand=True)
+        ttk.Label(tab_tester, text="Modem M2 Tools", font=("Arial", 12, "bold")).pack(pady=10)
         
-        ttk.Label(tester_inner, text="Connection Tester Tools", font=("Arial", 11, "bold")).pack(pady=5)
-        
-        btns_tester = [
-            ("Init Tester Session", self.init_tester),
-            ("Check Ethernet", self.tester_check_eth),
-            ("Check WLAN", self.tester_check_wlan),
-            ("Modem Diag (Full)", self.tester_modem_diag),
-            ("Modem Check Mode", self.tester_modem_check_mode),
-            ("Start PPP Daemon", self.tester_ppp_on),
-            ("Stop PPP Daemon", self.tester_ppp_off),
+        tests = [
+            ("RUN FULL TEST M2", "python3 connection-manager.py --human --electrical"),
+            ("Test LTE Connection", "python3 connection-manager.py --human"),
+            ("Test LTE Download", "python3 download.py"),
+            ("Flash M.2 Module", "python3 connection-manager.py --human --application --revert"),
+            ("Check M.2 Software", "python3 connection-manager.py --human --debug --at AT#XSLMVER")
         ]
         
-        for txt, cmd in btns_tester:
-            ttk.Button(tester_inner, text=txt, command=cmd, style='Action.TButton').pack(fill=tk.X, pady=2, padx=10)
+        for txt, cmd in tests:
+            def _make_cmd(c): return lambda: self.run_bg(c)
+            ttk.Button(tab_tester, text=txt, command=_make_cmd(cmd), style='Action.TButton').pack(fill=tk.X, pady=3, padx=20)
 
         # ---- TAB 3: CONNECT ----
-        tab2 = ttk.Frame(self.nb, padding=2)
+        tab2 = ttk.Frame(self.nb, padding=5)
         self.nb.add(tab2, text=" CONNECT ")
-        for name, var, cmd in [("Beeper", self.beeper_state, self.toggle_beeper), ("PWR 1", None, self.toggle_pwr1), ("PWR 2", None, self.toggle_pwr2)]:
-            f = ttk.Frame(tab2); f.pack(fill=tk.X, pady=1); t = var if var else name; ttk.Button(f, textvariable=t if var else None, text=None if var else name, command=cmd).pack(fill=tk.X)
+        
+        # Helper for adding control rows
+        def add_ctrl_row(parent, label_text, var, cmd):
+            row = ttk.Frame(parent); row.pack(fill=tk.X, pady=2)
+            ttk.Label(row, text=label_text, font=("Arial", 9, "bold"), width=12).pack(side=tk.LEFT)
+            btn = ttk.Button(row, textvariable=var, command=cmd)
+            if not var: btn.configure(text=label_text)
+            btn.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # Controls
+        add_ctrl_row(tab2, "Beeper:", self.beeper_state, self.toggle_beeper)
+        add_ctrl_row(tab2, "Power 1:", self.pwr1_text, self.toggle_pwr1)
+        add_ctrl_row(tab2, "Power 2:", self.pwr2_text, self.toggle_pwr2)
         m_f = ttk.LabelFrame(tab2, text=" Modem Info ", padding=2); m_f.pack(fill=tk.X, pady=1)
         for l, v in [("Stat:", self.modem_status), ("Ver:", self.m2_software), ("IMEI:", self.m2_imei)]:
             f = ttk.Frame(m_f); f.pack(fill=tk.X); ttk.Label(f, text=l, font=("Arial",8)).pack(side=tk.LEFT); ttk.Label(f, textvariable=v, style='Value.TLabel' if v==self.modem_status else 'TLabel').pack(side=tk.LEFT)
         for t, c in [("Wiring Check", lambda: self.run_modem_cmd(["--human","--electrical"])), ("LTE Check", lambda: self.run_modem_cmd(["--human"])), ("Test Download", lambda: self.run_modem_cmd(["python3","download.py"]))]:
             ttk.Button(tab2, text=t, command=c).pack(fill=tk.X, pady=1)
-        w_f = ttk.LabelFrame(tab2, text=" WLAN ", padding=2); w_f.pack(fill=tk.X, pady=1); ttk.Label(w_f, textvariable=self.wlan_ssid, relief="sunken", font=("Arial", 8)).pack(fill=tk.X); ttk.Button(w_f, text="Connect WLAN", command=lambda: self.log("Request: Kbd")).pack(fill=tk.X)
+
+        # Network MAC Info
+        net_f = ttk.LabelFrame(tab2, text=" Network Interfaces ", padding=5)
+        net_f.pack(fill=tk.X, pady=5)
+        
+        for label, var in [("LAN MAC:", self.lan_mac), ("WLAN MAC:", self.wlan_mac)]:
+            row = ttk.Frame(net_f); row.pack(fill=tk.X, pady=1)
+            ttk.Label(row, text=label, font=("Arial", 8, "bold"), width=12).pack(side=tk.LEFT)
+            ttk.Label(row, textvariable=var, style='Value.TLabel').pack(side=tk.LEFT, padx=5)
 
         # ---- TAB 4: ADVANCED ----
         tab3 = ttk.Frame(self.nb, padding=1)
@@ -302,8 +336,29 @@ class ControlPanelV5:
             self.log(f"Beeper: {nxt}")
         self.bg_task(_task)
 
-    def toggle_pwr1(self): self.bg_task(lambda: (self.pwr1.set(not self.pwr1.get()), GPIO.setup(26, GPIO.OUT), GPIO.output(26, self.pwr1.get()), self.log(f"PWR 1: {'ON' if self.pwr1.get() else 'OFF'}")))
-    def toggle_pwr2(self): self.bg_task(lambda: (self.pwr2.set(not self.pwr2.get()), GPIO.setup(22, GPIO.OUT), GPIO.output(22, self.pwr2.get()), self.log(f"PWR 2: {'ON' if self.pwr2.get() else 'OFF'}")))
+    def toggle_pwr1(self):
+        def _task():
+            new_state = not self.pwr1.get()
+            self.pwr1.set(new_state)
+            self.pwr1_text.set("ON" if new_state else "OFF")
+            try:
+                GPIO.setup(26, GPIO.OUT)
+                GPIO.output(26, new_state)
+            except: pass
+            self.log(f"PWR 1: {'ON' if new_state else 'OFF'}")
+        self.bg_task(_task)
+
+    def toggle_pwr2(self):
+        def _task():
+            new_state = not self.pwr2.get()
+            self.pwr2.set(new_state)
+            self.pwr2_text.set("ON" if new_state else "OFF")
+            try:
+                GPIO.setup(22, GPIO.OUT)
+                GPIO.output(22, new_state)
+            except: pass
+            self.log(f"PWR 2: {'ON' if new_state else 'OFF'}")
+        self.bg_task(_task)
     
     def set_gpio_mode(self, p, m): 
         try: GPIO.setup(p, GPIO.IN if m=="IN" else GPIO.OUT); self.log(f"Pin P{p} -> {m}")
@@ -346,6 +401,23 @@ class ControlPanelV5:
         if self._beep_proc: self._beep_proc.kill()
         GPIO.cleanup(); self.root.destroy()
     def run(self): self.root.mainloop()
+
+    def get_network_info(self):
+        def _get(iface):
+            try:
+                with open(f"/sys/class/net/{iface}/address", "r") as f:
+                    return f.read().strip().upper()
+            except: return None
+
+        import os
+        ifaces = os.listdir("/sys/class/net")
+        for iface in ifaces:
+            if iface.startswith(("eth", "en")) and iface != "lo":
+                mac = _get(iface)
+                if mac: self.lan_mac.set(mac)
+            elif iface.startswith(("wlan", "wlp")):
+                mac = _get(iface)
+                if mac: self.wlan_mac.set(mac)
 
 if __name__ == "__main__":
     ControlPanelV5().run()
