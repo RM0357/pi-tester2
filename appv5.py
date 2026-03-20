@@ -121,7 +121,7 @@ class ControlPanelV5:
         
         sr = ttk.Frame(t_box); sr.pack(fill=tk.X); ttk.Label(sr, text="SYS:", font=("Arial", 9, "bold")).pack(side=tk.LEFT); ttk.Label(sr, textvariable=self.sys_time, style='Clock.TLabel').pack(side=tk.LEFT, padx=3)
         br1 = ttk.Frame(t_box); br1.pack(fill=tk.X, pady=1)
-        ttk.Button(br1, text="Preset.25", command=lambda: self.run_bg("sudo date -s '2025-05-05 05:05:05'")).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
+        ttk.Button(br1, text="Preset.26", command=lambda: self.run_bg("sudo date -s '2026-01-01 07:07:07'")).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
         ttk.Button(br1, text="SysPrefix", command=self.sync_sys_prefix).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
         
         rr = ttk.Frame(t_box); rr.pack(fill=tk.X, pady=(2,0)); ttk.Label(rr, text="RTC:", font=("Arial", 9, "bold")).pack(side=tk.LEFT); ttk.Label(rr, textvariable=self.rtc_time, style='Clock.TLabel').pack(side=tk.LEFT, padx=3)
