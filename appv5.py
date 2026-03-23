@@ -69,7 +69,7 @@ class ControlPanelV5:
         self.style.configure('TNotebook.Tab', padding=[10, 2], font=('Arial', 9, 'bold'))
         self.style.configure('Value.TLabel', font=('Courier', 10, 'bold'), foreground='#0099ff')
         self.style.configure('Clock.TLabel', font=('Courier', 11, 'bold'), foreground='#0099ff')
-        self.style.configure('GPIO.TButton', font=('Arial', 12, 'bold'), width=2, padding=4)
+        self.style.configure('GPIO.TButton', font=('Arial', 10, 'bold'), width=4, padding=6)
         self.style.configure('Action.TButton', font=('Arial', 10, 'bold'), padding=5)
 
         self.get_network_info()
@@ -176,32 +176,49 @@ class ControlPanelV5:
             ttk.Label(row, text=label, font=("Arial", 8, "bold"), width=12).pack(side=tk.LEFT)
             ttk.Label(row, textvariable=var, style='Value.TLabel').pack(side=tk.LEFT, padx=5)
 
-        # ---- TAB 3: CONNECT ----
-        tab2 = ttk.Frame(self.nb, padding=5)
-        self.nb.add(tab2, text=" CONNECT ")
-        
-        m_f = ttk.LabelFrame(tab2, text=" Modem Info ", padding=2); m_f.pack(fill=tk.X, pady=1)
+        # Modem Info Frame at the bottom
+        m_f = ttk.LabelFrame(tab_tester, text=" Modem Info ", padding=2)
+        m_f.pack(fill=tk.X, side=tk.BOTTOM, pady=1)
         for l, v in [("Stat:", self.modem_status), ("Ver:", self.m2_software), ("IMEI:", self.m2_imei)]:
-            f = ttk.Frame(m_f); f.pack(fill=tk.X); ttk.Label(f, text=l, font=("Arial",8)).pack(side=tk.LEFT); ttk.Label(f, textvariable=v, style='Value.TLabel' if v==self.modem_status else 'TLabel').pack(side=tk.LEFT)
-        for t, c in [("Wiring Check", lambda: self.run_modem_cmd(["python3", "/etc/undock/connection-manager.py", "--human","--electrical"])), ("LTE Check", lambda: self.run_modem_cmd(["python3", "/etc/undock/connection-manager.py", "--human"])), ("Test Download", lambda: self.run_modem_cmd(["python3", "/home/pi/Desktop/download/download.py"]))]:
-            ttk.Button(tab2, text=t, command=c).pack(fill=tk.X, pady=1)
+            f = ttk.Frame(m_f); f.pack(fill=tk.X)
+            ttk.Label(f, text=l, font=("Arial",8)).pack(side=tk.LEFT)
+            ttk.Label(f, textvariable=v, style='Value.TLabel' if v==self.modem_status else 'TLabel').pack(side=tk.LEFT)
 
-        # ---- TAB 4: ADVANCED ----
-        tab3 = ttk.Frame(self.nb, padding=1)
-        self.nb.add(tab3, text=" ADV ")
+        # ---- TAB 3: ADVANCED ----
+        tab3 = ttk.Frame(self.nb, padding=5)
+        self.nb.add(tab3, text=" ADVANCED ")
         nb_g = ttk.Notebook(tab3); nb_g.pack(fill=tk.BOTH, expand=True)
         self.gpio_elements = {}
-        for title, pins in [("2-9", range(2, 10)), ("10-17", range(10, 18)), ("18-25", range(18, 26)), ("26-27", range(26, 28))]:
-            tab_g = ttk.Frame(nb_g, padding=2); nb_g.add(tab_g, text=title)
+        for title, pins in [("2-5", range(2, 6)), ("6-9", range(6, 10)), ("10-13", range(10, 14)), ("14-17", range(14, 18)), ("18-21", range(18, 22)), ("22-25", range(22, 26)), ("26-27", range(26, 28))]:
+            tab_g = ttk.Frame(nb_g, padding=10); nb_g.add(tab_g, text=title)
+            
             for i, p in enumerate(pins):
-                r, c = divmod(i, 2); f = ttk.Frame(tab_g, relief="groove", borderwidth=1); f.grid(row=r, column=c, padx=1, pady=3, sticky="ew", ipady=1)
-                tab_g.columnconfigure(c, weight=1); ind_f = ttk.Frame(f); ind_f.pack(side=tk.LEFT, padx=(2, 5))
-                led = tk.Canvas(ind_f, width=16, height=16, highlightthickness=0); led.pack(side=tk.LEFT, padx=1); obj = led.create_oval(2, 2, 14, 14, fill="gray"); ttk.Label(ind_f, text=f"P{p}", font=("Arial", 12, "bold")).pack(side=tk.LEFT)
-                btn_f = ttk.Frame(f); btn_f.pack(side=tk.LEFT)
+                # module container - one below another (vertical)
+                f = ttk.Frame(tab_g, relief="groove", borderwidth=1)
+                f.pack(fill=tk.X, pady=6, padx=10)
+                
+                # Inner container for spacing
+                inner = ttk.Frame(f)
+                inner.pack(fill=tk.X, padx=8, pady=4)
+                
+                # Left part: LED + Label
+                ind_f = ttk.Frame(inner)
+                ind_f.pack(side=tk.LEFT)
+                led = tk.Canvas(ind_f, width=20, height=20, highlightthickness=0)
+                led.pack(side=tk.LEFT, padx=(2, 8))
+                obj = led.create_oval(2, 2, 18, 18, fill="gray")
+                ttk.Label(ind_f, text=f"P{p}", font=("Arial", 12, "bold")).pack(side=tk.LEFT)
+                
+                # Right part: Control Buttons
+                btn_f = ttk.Frame(inner)
+                btn_f.pack(side=tk.RIGHT)
                 for t, m, l in [("I","IN",None), ("O","OUT",None), ("H",None,1), ("L",None,0)]:
                     cmd_f = (lambda x=p,mode=m: self.bg_task(lambda: self.set_gpio_mode(x,mode))) if m else (lambda x=p,lvl=l: self.bg_task(lambda: self.set_gpio_level(x,lvl)))
-                    ttk.Button(btn_f, text=t, style='GPIO.TButton', command=cmd_f).pack(side=tk.LEFT, padx=0)
+                    ttk.Button(btn_f, text=t, style='GPIO.TButton', command=cmd_f).pack(side=tk.LEFT, padx=1)
+                    
                 self.gpio_elements[p] = {"led": led, "obj": obj}
+        
+        self.sync_hw_states()
 
     # --- LOGIC ---
     def log(self, m):
@@ -405,6 +422,20 @@ class ControlPanelV5:
         if self._beep_proc: self._beep_proc.kill()
         GPIO.cleanup(); self.root.destroy()
     def run(self): self.root.mainloop()
+
+    def sync_hw_states(self):
+        # Initial Hardware Sync for M.2 Power and Power 2
+        if IS_PI:
+            try:
+                GPIO.setmode(GPIO.BCM)
+                # M.2 Power (GP26) Inverted logic
+                GPIO.setup(26, GPIO.OUT)
+                GPIO.output(26, 0 if self.pwr1.get() else 1)
+                # Power 2 (GP22) Standard logic
+                GPIO.setup(22, GPIO.OUT)
+                GPIO.output(22, 1 if self.pwr2.get() else 0)
+            except Exception as e:
+                self.log(f"HW Sync Err: {e}")
 
     def get_network_info(self):
         def _get(iface):
