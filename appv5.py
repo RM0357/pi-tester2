@@ -189,7 +189,7 @@ class ControlPanelV5:
         self.nb.add(tab3, text=" ADVANCED ")
         nb_g = ttk.Notebook(tab3); nb_g.pack(fill=tk.BOTH, expand=True)
         self.gpio_elements = {}
-        for title, pins in [("2-6", range(2, 7)), ("7-11", range(7, 12)), ("12-16", range(12, 17)), ("17-21", range(17, 22)), ("22-26", range(22, 27)), ("27", range(27, 28))]:
+        for title, pins in [("2-7", range(2, 8)), ("8-13", range(8, 14)), ("14-19", range(14, 20)), ("20-25", range(20, 26)), ("26-27", range(26, 28))]:
             tab_g = ttk.Frame(nb_g, padding=10); nb_g.add(tab_g, text=title)
             
             for i, p in enumerate(pins):
