@@ -1,4 +1,4 @@
-#!/home/rm/Desktop/gui-pytester/pycode/.venv/bin/python3
+#!/usr/bin/env python3
 import tkinter as tk
 from tkinter import ttk, scrolledtext
 import subprocess

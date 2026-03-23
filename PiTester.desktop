@@ -1,8 +1,9 @@
 [Desktop Entry]
+Type=Application
 Name=Pi Tester
 Comment=GPIO Tester GUI
-Exec=sh -c 'cd "$(dirname "%k")" && sudo -E python3 appv5.py'
+Exec=/home/pi/Desktop/App/pi-tester2/start-appv5.sh
 Icon=utilities-terminal
 Terminal=false
-Type=Application
-Categories=Development;
+Categories=Utility;
+StartupNotify=true
