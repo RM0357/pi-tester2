@@ -1,8 +1,8 @@
 [Desktop Entry]
 Name=Pi Tester
 Comment=GPIO Tester GUI
-Exec=/home/rm/Desktop/gui-pytester/pycode/appv5.py
-Path=/home/rm/Desktop/gui-pytester/pycode
+Exec=sudo -E ./appv5.py
+Path=.
 Icon=utilities-terminal
 Terminal=false
 Type=Application
