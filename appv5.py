@@ -176,13 +176,18 @@ class ControlPanelV5:
             ttk.Label(row, text=label, font=("Arial", 8, "bold"), width=12).pack(side=tk.LEFT)
             ttk.Label(row, textvariable=var, style='Value.TLabel').pack(side=tk.LEFT, padx=5)
 
-        # Modem Info Frame at the bottom
-        m_f = ttk.LabelFrame(tab_tester, text=" Modem Info ", padding=2)
-        m_f.pack(fill=tk.X, side=tk.BOTTOM, pady=1)
-        for l, v in [("Stat:", self.modem_status), ("Ver:", self.m2_software), ("IMEI:", self.m2_imei)]:
-            f = ttk.Frame(m_f); f.pack(fill=tk.X)
-            ttk.Label(f, text=l, font=("Arial",8)).pack(side=tk.LEFT)
-            ttk.Label(f, textvariable=v, style='Value.TLabel' if v==self.modem_status else 'TLabel').pack(side=tk.LEFT)
+        # Clean Modem Info section (directly below Network Interfaces)
+        m_f = ttk.Frame(tab_tester, padding=2)
+        m_f.pack(fill=tk.X, pady=5)
+
+        # Row 1: Version next to label
+        r1 = ttk.Frame(m_f); r1.pack(fill=tk.X)
+        ttk.Label(r1, text="Version:", font=("Arial", 8, "bold")).pack(side=tk.LEFT)
+        ttk.Label(r1, textvariable=self.m2_software, style='TLabel').pack(side=tk.LEFT, padx=5)
+
+        # Row 2: IMEI only (already contains "IMEI: " prefix)
+        r2 = ttk.Frame(m_f); r2.pack(fill=tk.X)
+        ttk.Label(r2, textvariable=self.m2_imei, style='TLabel').pack(side=tk.LEFT)
 
         # ---- TAB 3: ADVANCED ----
         tab3 = ttk.Frame(self.nb, padding=5)
