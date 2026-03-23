@@ -144,9 +144,10 @@ class ControlPanelV5:
         ttk.Button(br3, text="Sys->RTC", command=lambda: self.run_bg("sudo hwclock --systohc -f /dev/rtc", self.refresh_rtc_display)).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
         ttk.Button(br3, text="RTC->Sys", command=lambda: self.run_bg("sudo hwclock --hctosys -f /dev/rtc", self.refresh_rtc_display)).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
         
-        man_f = ttk.Frame(t_box); man_f.pack(fill=tk.X, pady=1); ttk.Label(man_f, text="Set Manual:", font=("Arial", 8)).pack(anchor="w")
-        self.rtc_entry = ttk.Entry(man_f, font=("Courier", 10)); self.rtc_entry.insert(0, "2025-12-24 13:45:30"); self.rtc_entry.pack(fill=tk.X, pady=1)
-        ttk.Button(man_f, text="SET HARDWARE CLOCK", command=lambda: self.run_bg(f'sudo hwclock --set --date="{self.rtc_entry.get()}" -f /dev/rtc', self.refresh_rtc_display)).pack(fill=tk.X)
+        man_f = ttk.Frame(t_box); man_f.pack(fill=tk.X, pady=1)
+        self.rtc_entry = ttk.Entry(man_f, font=("Courier", 10)); self.rtc_entry.insert(0, "2025-12-24 13:45:30")
+        self.rtc_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2), pady=1)
+        ttk.Button(man_f, text="Set", command=lambda: self.run_bg(f'sudo hwclock --set --date="{self.rtc_entry.get()}" -f /dev/rtc', self.refresh_rtc_display)).pack(side=tk.LEFT, padx=1)
 
         # ---- TAB 2: TESTER ----
         tab_tester = ttk.Frame(self.nb, padding=10)
