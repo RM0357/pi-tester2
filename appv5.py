@@ -92,9 +92,9 @@ class ControlPanelV5:
         self.nb = ttk.Notebook(self.root)
         self.nb.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # ---- TAB 1: DASHBOARD ----
+        # ---- TAB 1: BOARD TEST ----
         tab1 = ttk.Frame(self.nb, padding=2)
-        self.nb.add(tab1, text=" DASHBOARD ")
+        self.nb.add(tab1, text=" BOARD TEST ")
         
         top_bar = ttk.Frame(tab1, relief="groove", padding=5)
         top_bar.pack(fill=tk.X, pady=2)
@@ -108,16 +108,29 @@ class ControlPanelV5:
             ttk.Label(f_tmp, text=lbl, font=("Arial", 9, "bold")).pack(side=tk.LEFT)
             ttk.Label(f_tmp, textvariable=var, style='Value.TLabel').pack(side=tk.LEFT, padx=2)
 
-        # Separator for a cleaner look
         ttk.Separator(top_bar, orient='horizontal').pack(fill=tk.X, pady=5)
 
-        # Row 2: NFC ID
+        # Row 2: NFC Info
         nfc_row = ttk.Frame(top_bar)
         nfc_row.pack(fill=tk.X)
         ttk.Label(nfc_row, text="NFC ID:", font=("Arial", 9, "bold")).pack(side=tk.LEFT, padx=(10, 5))
         ttk.Label(nfc_row, textvariable=self.nfc_id, font=("Courier", 11, "bold"), foreground="#d9534f").pack(side=tk.LEFT)
 
-        t_box = ttk.LabelFrame(tab1, text=" Time Control ", padding=3)
+        # --- HW Controls (Beeper & Power Outputs) ---
+        hw_f = ttk.LabelFrame(tab1, text=" Hardware Controls ", padding=3)
+        hw_f.pack(fill=tk.X, pady=1)
+
+        def add_hw_row(parent, label, var, cmd):
+            r = ttk.Frame(parent); r.pack(fill=tk.X, pady=1)
+            ttk.Label(r, text=label, font=("Arial", 9, "bold"), width=12).pack(side=tk.LEFT)
+            ttk.Button(r, textvariable=var, command=cmd).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        add_hw_row(hw_f, "Beeper:", self.beeper_state, self.toggle_beeper)
+        add_hw_row(hw_f, "M.2 Power:", self.pwr1_text, self.toggle_pwr1)
+        add_hw_row(hw_f, "Power 2:", self.pwr2_text, self.toggle_pwr2)
+
+        # --- RTC (Time Control) ---
+        t_box = ttk.LabelFrame(tab1, text=" Time Control (RTC) ", padding=3)
         t_box.pack(fill=tk.BOTH, expand=True, pady=1)
         
         sr = ttk.Frame(t_box); sr.pack(fill=tk.X); ttk.Label(sr, text="SYS:", font=("Arial", 9, "bold")).pack(side=tk.LEFT); ttk.Label(sr, textvariable=self.sys_time, style='Clock.TLabel').pack(side=tk.LEFT, padx=3)
@@ -159,18 +172,6 @@ class ControlPanelV5:
         tab2 = ttk.Frame(self.nb, padding=5)
         self.nb.add(tab2, text=" CONNECT ")
         
-        # Helper for adding control rows
-        def add_ctrl_row(parent, label_text, var, cmd):
-            row = ttk.Frame(parent); row.pack(fill=tk.X, pady=2)
-            ttk.Label(row, text=label_text, font=("Arial", 9, "bold"), width=12).pack(side=tk.LEFT)
-            btn = ttk.Button(row, textvariable=var, command=cmd)
-            if not var: btn.configure(text=label_text)
-            btn.pack(side=tk.LEFT, fill=tk.X, expand=True)
-
-        # Controls
-        add_ctrl_row(tab2, "Beeper:", self.beeper_state, self.toggle_beeper)
-        add_ctrl_row(tab2, "Power 1:", self.pwr1_text, self.toggle_pwr1)
-        add_ctrl_row(tab2, "Power 2:", self.pwr2_text, self.toggle_pwr2)
         m_f = ttk.LabelFrame(tab2, text=" Modem Info ", padding=2); m_f.pack(fill=tk.X, pady=1)
         for l, v in [("Stat:", self.modem_status), ("Ver:", self.m2_software), ("IMEI:", self.m2_imei)]:
             f = ttk.Frame(m_f); f.pack(fill=tk.X); ttk.Label(f, text=l, font=("Arial",8)).pack(side=tk.LEFT); ttk.Label(f, textvariable=v, style='Value.TLabel' if v==self.modem_status else 'TLabel').pack(side=tk.LEFT)
@@ -339,14 +340,15 @@ class ControlPanelV5:
 
     def toggle_pwr1(self):
         def _task():
-            new_state = not self.pwr1.get()
-            self.pwr1.set(new_state)
-            self.pwr1_text.set("ON" if new_state else "OFF")
+            is_on = not self.pwr1.get()
+            self.pwr1.set(is_on)
+            self.pwr1_text.set("ON" if is_on else "OFF")
             try:
                 GPIO.setup(26, GPIO.OUT)
-                GPIO.output(26, new_state)
+                # GP26 on (True) = 3V3 off; GP26 off (False) = 3V3 on
+                GPIO.output(26, 0 if is_on else 1) 
             except: pass
-            self.log(f"PWR 1: {'ON' if new_state else 'OFF'}")
+            self.log(f"M.2 Power: {'ON' if is_on else 'OFF'} (GP26: {'LOW' if is_on else 'HIGH'})")
         self.bg_task(_task)
 
     def toggle_pwr2(self):
@@ -358,7 +360,7 @@ class ControlPanelV5:
                 GPIO.setup(22, GPIO.OUT)
                 GPIO.output(22, new_state)
             except: pass
-            self.log(f"PWR 2: {'ON' if new_state else 'OFF'}")
+            self.log(f"Power 2: {'ON' if new_state else 'OFF'}")
         self.bg_task(_task)
     
     def set_gpio_mode(self, p, m): 
