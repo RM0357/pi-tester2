@@ -149,23 +149,32 @@ class ControlPanelV5:
         self.rtc_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2), pady=1)
         ttk.Button(man_f, text="Set", command=lambda: self.run_bg(f'sudo hwclock --set --date="{self.rtc_entry.get()}" -f /dev/rtc', self.refresh_rtc_display)).pack(side=tk.LEFT, padx=1)
 
-        # ---- TAB 2: TESTER ----
+        # ---- TAB 2: CONNECTION TEST ----
         tab_tester = ttk.Frame(self.nb, padding=10)
-        self.nb.add(tab_tester, text=" TESTER ")
+        self.nb.add(tab_tester, text=" CONNECTION TEST ")
         
-        ttk.Label(tab_tester, text="Modem M2 Tools", font=("Arial", 12, "bold")).pack(pady=10)
-        
+        # Diagnostic Buttons
         tests = [
-            ("RUN FULL TEST M2", "python3 connection-manager.py --human --electrical"),
-            ("Test LTE Connection", "python3 connection-manager.py --human"),
-            ("Test LTE Download", "python3 download.py"),
-            ("Flash M.2 Module", "python3 connection-manager.py --human --application --revert"),
-            ("Check M.2 Software", "python3 connection-manager.py --human --debug --at AT#XSLMVER")
+            ("Detect M.2 Module", "python3 /etc/undock/connection-manager.py -detect"),
+            ("M.2 wiring Test", "python3 /etc/undock/connection-manager.py --human --electrical"),
+            ("LTE Connection Test", "python3 /etc/undock/connection-manager.py --human"),
+            ("LTE Download Test", "python3 /home/pi/Desktop/download/download.py"),
+            ("Flash M.2 Firmware", "python3 /etc/undock/connection-manager.py --human --application --revert"),
+            ("Show Firmware Version and IMEI", "python3 /etc/undock/connection-manager.py --human --debug --at AT#XSLMVER && python3 /etc/undock/connection-manager.py --human --debug --at AT+CGSN=1")
         ]
         
         for txt, cmd in tests:
             def _make_cmd(c): return lambda: self.run_bg(c)
-            ttk.Button(tab_tester, text=txt, command=_make_cmd(cmd), style='Action.TButton').pack(fill=tk.X, pady=3, padx=20)
+            ttk.Button(tab_tester, text=txt, command=_make_cmd(cmd), style='Action.TButton').pack(fill=tk.X, pady=3, padx=10)
+
+        # Network MAC Info immediately after the buttons
+        net_f = ttk.LabelFrame(tab_tester, text=" Network Interfaces ", padding=5)
+        net_f.pack(fill=tk.X, pady=5)
+        
+        for label, var in [("LAN MAC:", self.lan_mac), ("WLAN MAC:", self.wlan_mac)]:
+            row = ttk.Frame(net_f); row.pack(fill=tk.X, pady=1)
+            ttk.Label(row, text=label, font=("Arial", 8, "bold"), width=12).pack(side=tk.LEFT)
+            ttk.Label(row, textvariable=var, style='Value.TLabel').pack(side=tk.LEFT, padx=5)
 
         # ---- TAB 3: CONNECT ----
         tab2 = ttk.Frame(self.nb, padding=5)
@@ -174,17 +183,8 @@ class ControlPanelV5:
         m_f = ttk.LabelFrame(tab2, text=" Modem Info ", padding=2); m_f.pack(fill=tk.X, pady=1)
         for l, v in [("Stat:", self.modem_status), ("Ver:", self.m2_software), ("IMEI:", self.m2_imei)]:
             f = ttk.Frame(m_f); f.pack(fill=tk.X); ttk.Label(f, text=l, font=("Arial",8)).pack(side=tk.LEFT); ttk.Label(f, textvariable=v, style='Value.TLabel' if v==self.modem_status else 'TLabel').pack(side=tk.LEFT)
-        for t, c in [("Wiring Check", lambda: self.run_modem_cmd(["--human","--electrical"])), ("LTE Check", lambda: self.run_modem_cmd(["--human"])), ("Test Download", lambda: self.run_modem_cmd(["python3","download.py"]))]:
+        for t, c in [("Wiring Check", lambda: self.run_modem_cmd(["python3", "/etc/undock/connection-manager.py", "--human","--electrical"])), ("LTE Check", lambda: self.run_modem_cmd(["python3", "/etc/undock/connection-manager.py", "--human"])), ("Test Download", lambda: self.run_modem_cmd(["python3", "/home/pi/Desktop/download/download.py"]))]:
             ttk.Button(tab2, text=t, command=c).pack(fill=tk.X, pady=1)
-
-        # Network MAC Info
-        net_f = ttk.LabelFrame(tab2, text=" Network Interfaces ", padding=5)
-        net_f.pack(fill=tk.X, pady=5)
-        
-        for label, var in [("LAN MAC:", self.lan_mac), ("WLAN MAC:", self.wlan_mac)]:
-            row = ttk.Frame(net_f); row.pack(fill=tk.X, pady=1)
-            ttk.Label(row, text=label, font=("Arial", 8, "bold"), width=12).pack(side=tk.LEFT)
-            ttk.Label(row, textvariable=var, style='Value.TLabel').pack(side=tk.LEFT, padx=5)
 
         # ---- TAB 4: ADVANCED ----
         tab3 = ttk.Frame(self.nb, padding=1)
