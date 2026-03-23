@@ -1,8 +1,7 @@
 [Desktop Entry]
 Name=Pi Tester
 Comment=GPIO Tester GUI
-Exec=sudo -E ./appv5.py
-Path=.
+Exec=sh -c 'cd "$(dirname "%k")" && sudo -E python3 appv5.py'
 Icon=utilities-terminal
 Terminal=false
 Type=Application
