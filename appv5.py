@@ -403,9 +403,9 @@ class ControlPanelV5:
             while True:
                 if IS_PI:
                     t = readTemps.read_all_temps() or [None,None,None]
-                    self.temp_pi.set(f"{t[0]:.1f}" if t[0] else "?")
-                    self.temp_smps.set(f"{t[2]:.1f}" if t[2] else "?") # Swapped with Ambient
-                    self.temp_ambient.set(f"{t[1]:.1f}" if t[1] else "?") # Swapped with PSU
+                    self.temp_pi.set(f"{t[0]:.1f C}" if t[0] else "?")
+                    self.temp_smps.set(f"{t[2]:.1f C}" if t[2] else "?") # Swapped with Ambient
+                    self.temp_ambient.set(f"{t[1]:.1f C}" if t[1] else "?") # Swapped with PSU
                 else: self.temp_pi.set("30.0"); self.temp_smps.set("40.0"); self.temp_ambient.set("20.0")
                 time.sleep(2)
         threading.Thread(target=_temp, daemon=True).start()
