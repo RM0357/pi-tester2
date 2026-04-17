@@ -159,7 +159,7 @@ class ControlPanelV5:
             ("M.2 wiring Test", "python3 /etc/undock/connection-manager.py --human --electrical"),
             ("LTE Connection Test", "python3 /etc/undock/connection-manager.py --human"),
             ("LTE Download Test", "python3 /home/pi/Desktop/download/download.py"),
-            ("Flash M.2 Firmware", "python3 /etc/undock/connection-manager.py --human --application --revert"),
+            ("Flash M.2 Firmware", "sudo -E python3 /etc/undock/connection-manager.py --human --application --revert"),
             ("Show Firmware Version and IMEI", "python3 /etc/undock/connection-manager.py --human --debug --at AT#XSLMVER && python3 /etc/undock/connection-manager.py --human --debug --at AT+CGSN=1")
         ]
         
