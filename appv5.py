@@ -42,7 +42,7 @@ class ControlPanelV5:
         self.temp_ambient = tk.StringVar(value="--")
         self.sys_time = tk.StringVar(value="--")
         self.rtc_time = tk.StringVar(value="--")
-        self.nfc_id = tk.StringVar(value="no card")
+        self.nfc_id = tk.StringVar(value="no chip")
         self.beeper_state = tk.StringVar(value="off")
         self.pwr1 = tk.BooleanVar(value=True)
         self.pwr2 = tk.BooleanVar(value=True)
@@ -102,7 +102,7 @@ class ControlPanelV5:
         # Row 1: Temperature Sensors
         temp_row = ttk.Frame(top_bar)
         temp_row.pack(fill=tk.X)
-        for lbl, var in [("Pi CPU:", self.temp_pi), ("PSU:", self.temp_smps), ("Ambient:", self.temp_ambient)]:
+        for lbl, var in [("Temp Pi", self.temp_pi), ("Temp SMPS", self.temp_smps), ("Temp Amb.", self.temp_ambient)]:
             f_tmp = ttk.Frame(temp_row)
             f_tmp.pack(side=tk.LEFT, padx=10, expand=True)
             ttk.Label(f_tmp, text=lbl, font=("Arial", 9, "bold")).pack(side=tk.LEFT)
@@ -127,16 +127,16 @@ class ControlPanelV5:
 
         add_hw_row(hw_f, "Beeper:", self.beeper_state, self.toggle_beeper)
         add_hw_row(hw_f, "M.2 Power:", self.pwr1_text, self.toggle_pwr1)
-        add_hw_row(hw_f, "Power 2:", self.pwr2_text, self.toggle_pwr2)
+        add_hw_row(hw_f, "PWR 2 out:", self.pwr2_text, self.toggle_pwr2)
 
         # --- RTC (Time Control) ---
-        t_box = ttk.LabelFrame(tab1, text=" Time Control (RTC) ", padding=3)
+        t_box = ttk.LabelFrame(tab1, text="Time Control", padding=3)
         t_box.pack(fill=tk.BOTH, expand=True, pady=1)
         
         sr = ttk.Frame(t_box); sr.pack(fill=tk.X); ttk.Label(sr, text="SYS:", font=("Arial", 9, "bold")).pack(side=tk.LEFT); ttk.Label(sr, textvariable=self.sys_time, style='Clock.TLabel').pack(side=tk.LEFT, padx=3)
         br1 = ttk.Frame(t_box); br1.pack(fill=tk.X, pady=1)
-        ttk.Button(br1, text="Preset.26", command=lambda: self.run_bg("sudo date -s '2026-01-01 07:07:07'")).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
-        ttk.Button(br1, text="SysPrefix", command=self.sync_sys_prefix).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
+        ttk.Button(br1, text="Set Sys 01.01.2026", command=lambda: self.run_bg("sudo date -s '2026-01-01 01:01:01'")).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
+        ttk.Button(br1, text="Online -> Sys", command=self.sync_sys_prefix).pack(side=tk.LEFT, expand=True, fill=tk.X, padx=1)
         
         rr = ttk.Frame(t_box); rr.pack(fill=tk.X, pady=(2,0)); ttk.Label(rr, text="RTC:", font=("Arial", 9, "bold")).pack(side=tk.LEFT); ttk.Label(rr, textvariable=self.rtc_time, style='Clock.TLabel').pack(side=tk.LEFT, padx=3)
         
@@ -147,7 +147,7 @@ class ControlPanelV5:
         man_f = ttk.Frame(t_box); man_f.pack(fill=tk.X, pady=1)
         self.rtc_entry = ttk.Entry(man_f, font=("Courier", 10)); self.rtc_entry.insert(0, "2025-12-24 13:45:30")
         self.rtc_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 2), pady=1)
-        ttk.Button(man_f, text="Set", command=lambda: self.run_bg(f'sudo hwclock --set --date="{self.rtc_entry.get()}" -f /dev/rtc', self.refresh_rtc_display)).pack(side=tk.LEFT, padx=1)
+        ttk.Button(man_f, text="Set RTC manual", command=lambda: self.run_bg(f'sudo hwclock --set --date="{self.rtc_entry.get()}" -f /dev/rtc', self.refresh_rtc_display)).pack(side=tk.LEFT, padx=1)
 
         # ---- TAB 2: CONNECTION TEST ----
         tab_tester = ttk.Frame(self.nb, padding=10)
