@@ -104,7 +104,7 @@ class ControlPanelV5:
         temp_row.pack(fill=tk.X)
         for lbl, var in [("Temp Pi", self.temp_pi), ("Temp SMPS", self.temp_smps), ("Temp Amb.", self.temp_ambient)]:
             f_tmp = ttk.Frame(temp_row)
-            f_tmp.pack(side=tk.LEFT, padx=10, expand=True)
+            f_tmp.pack(side=tk.LEFT, padx=3, expand=True)
             ttk.Label(f_tmp, text=lbl, font=("Arial", 9, "bold")).pack(side=tk.LEFT)
             ttk.Label(f_tmp, textvariable=var, style='Value.TLabel').pack(side=tk.LEFT, padx=2)
 
