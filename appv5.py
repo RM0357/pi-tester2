@@ -23,6 +23,7 @@ else:
 
 import readTemps
 import connection_tester
+import nfc_reader
 
 class ControlPanelV5:
     def __init__(self):
@@ -35,6 +36,10 @@ class ControlPanelV5:
         # Locks & Concurrency
         self.cmd_lock = threading.Lock()
         self.is_busy = False
+        
+        # NFC Integration
+        self.nfc_mgr = None
+        self.nfc_continuous_flag = False
 
         # Variables
         self.temp_pi = tk.StringVar(value="--")
@@ -222,6 +227,23 @@ class ControlPanelV5:
                     ttk.Button(btn_f, text=t, style='GPIO.TButton', command=cmd_f).pack(side=tk.LEFT, padx=1)
                     
                 self.gpio_elements[p] = {"led": led, "obj": obj}
+                
+        # ---- TAB 4: NFC ----
+        tab_nfc = ttk.Frame(self.nb, padding=10)
+        self.nb.add(tab_nfc, text=" NFC ")
+        
+        nfc_btn_f = ttk.Frame(tab_nfc)
+        nfc_btn_f.pack(fill=tk.X, pady=5)
+        
+        ttk.Button(nfc_btn_f, text="Init Reader", command=self.nfc_init_reader).pack(side=tk.LEFT, padx=2)
+        ttk.Button(nfc_btn_f, text="Check Status", command=self.nfc_check_status).pack(side=tk.LEFT, padx=2)
+        ttk.Button(nfc_btn_f, text="Scan Once", command=self.nfc_scan_once).pack(side=tk.LEFT, padx=2)
+        ttk.Button(nfc_btn_f, text="Start Auto-Scan", command=self.nfc_start_scan).pack(side=tk.LEFT, padx=2)
+        ttk.Button(nfc_btn_f, text="Stop Auto-Scan", command=self.nfc_stop_scan).pack(side=tk.LEFT, padx=2)
+        
+        ttk.Label(tab_nfc, text="NFC Actions Log:", font=("Arial", 9, "bold")).pack(anchor="w", pady=(10,0))
+        self.nfc_log_text = scrolledtext.ScrolledText(tab_nfc, height=10, bg="#f4f4f4", font=("Courier", 10))
+        self.nfc_log_text.pack(fill=tk.BOTH, expand=True)
         
         self.sync_hw_states()
 
@@ -237,6 +259,69 @@ class ControlPanelV5:
             self.error_text.configure(state='disabled')
         # Schedule the UI update to run in the main thread to prevent crashes
         self.root.after(0, _update_log)
+
+    # --- NFC LOGIC ---
+    def nfc_log(self, m):
+        def _update():
+            t = datetime.datetime.now().strftime("%H:%M:%S")
+            self.nfc_log_text.configure(state='normal')
+            self.nfc_log_text.insert(tk.END, f"{t}: {m}\n")
+            self.nfc_log_text.see(tk.END)
+            self.nfc_log_text.configure(state='disabled')
+        self.root.after(0, _update)
+
+    def nfc_init_reader(self):
+        self.nfc_log("Initializing NFC Hardware...")
+        self.nfc_mgr = nfc_reader.NFCManager()
+        self.nfc_log(f"Status: {self.nfc_mgr.get_status()}")
+
+    def nfc_check_status(self):
+        if not self.nfc_mgr:
+            self.nfc_log("Error: NFC Reader not initialized. Click 'Init Reader'.")
+            return
+        self.nfc_log(f"Current Status: {self.nfc_mgr.get_status()}")
+
+    def nfc_scan_once(self):
+        if not self.nfc_mgr:
+            self.nfc_log("Error: Initialize reader first.")
+            return
+        self.nfc_log("Scanning for tag...")
+        tag_id = self.nfc_mgr.scan_for_tag()
+        if tag_id:
+            self.nfc_log(f"Tag detected! ID: {tag_id}")
+            self.nfc_id.set(str(tag_id))
+        else:
+            self.nfc_log("No tag found.")
+
+    def nfc_start_scan(self):
+        if not self.nfc_mgr:
+            self.nfc_log("Error: Initialize reader first.")
+            return
+        if self.nfc_continuous_flag:
+            self.nfc_log("Auto-scan already running.")
+            return
+        self.nfc_continuous_flag = True
+        self.nfc_log("Started continuous auto-scan...")
+        def _scan_loop():
+            last_id = None
+            while self.nfc_continuous_flag:
+                tag_id = self.nfc_mgr.scan_for_tag()
+                if tag_id and tag_id != last_id:
+                    self.nfc_log(f"Tag detected! ID: {tag_id}")
+                    # Update main dashboard UI variable thread-safely
+                    self.root.after(0, lambda t=tag_id: self.nfc_id.set(str(t)))
+                    last_id = tag_id
+                elif not tag_id:
+                    last_id = None
+                time.sleep(0.5)
+        threading.Thread(target=_scan_loop, daemon=True).start()
+
+    def nfc_stop_scan(self):
+        if self.nfc_continuous_flag:
+            self.nfc_continuous_flag = False
+            self.nfc_log("Stopped continuous auto-scan.")
+        else:
+            self.nfc_log("Auto-scan is not running.")
 
     def run_raw_sync(self, cmd):
         self.is_busy = True
