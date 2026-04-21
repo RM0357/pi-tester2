@@ -1,14 +1,23 @@
 #!/usr/bin/env python3
 import time
 import threading
+import os
 
-# Try to import Pi-specific GPIO and NFC libraries
-try:
-    import RPi.GPIO as GPIO
-    from mfrc522 import SimpleMFRC522
-    IS_PI = True
-except (ImportError, RuntimeError):
-    IS_PI = False
+# Check if we are running on a real Raspberry Pi
+IS_PI = os.path.exists('/sys/firmware/devicetree/base/model')
+
+if IS_PI:
+    try:
+        import RPi.GPIO as GPIO
+        from mfrc522 import SimpleMFRC522
+        LIBS_OK = True
+        ERR_MSG = ""
+    except Exception as e:
+        LIBS_OK = False
+        ERR_MSG = str(e)
+else:
+    LIBS_OK = False
+    ERR_MSG = "Not running on a Raspberry Pi."
 
 class NFCManager:
     def __init__(self):
@@ -21,6 +30,11 @@ class NFCManager:
         """Checks if the NFC chip is connected and initializes it."""
         if not IS_PI:
             self.status = "Mock Mode (Running on non-Pi device)"
+            self.is_connected = False
+            return
+
+        if not LIBS_OK:
+            self.status = f"Dependency Error: {ERR_MSG}. Did you install mfrc522?"
             self.is_connected = False
             return
 
@@ -77,7 +91,8 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             print("\nExiting diagnostic mode...")
         finally:
-            GPIO.cleanup()
+            if 'GPIO' in globals():
+                GPIO.cleanup()
     else:
         print("\nTroubleshooting:")
         print("1. Ensure the NFC module is physically wired to the Pi (SPI pins).")

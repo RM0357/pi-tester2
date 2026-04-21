@@ -160,12 +160,12 @@ class ControlPanelV5:
         
         # Diagnostic Buttons
         tests = [
-            ("Detect M.2 Module", "python3 /etc/undock/connection-manager.py -detect"),
-            ("M.2 wiring Test", "python3 /etc/undock/connection-manager.py --human --electrical"),
-            ("LTE Connection Test", "python3 /etc/undock/connection-manager.py --human"),
-            ("LTE Download Test", "python3 /home/pi/Desktop/download/download.py"),
-            ("Flash M.2 Firmware", "sudo -E python3 /etc/undock/connection-manager.py --human --application --revert"),
-            ("Show Firmware Version and IMEI", "python3 /etc/undock/connection-manager.py --human --debug --at AT#XSLMVER && python3 /etc/undock/connection-manager.py --human --debug --at AT+CGSN=1")
+            ("Detect M.2 Module", "python3 -u /etc/undock/connection-manager.py -detect"),
+            ("M.2 wiring Test", "python3 -u /etc/undock/connection-manager.py --human --electrical"),
+            ("LTE Connection Test", "python3 -u /etc/undock/connection-manager.py --human"),
+            ("LTE Download Test", "python3 -u /home/pi/Desktop/download/download.py"),
+            ("Flash M.2 Firmware", "sudo -E python3 -u /etc/undock/connection-manager.py --human --application --revert"),
+            ("Show Firmware Version and IMEI", "python3 -u /etc/undock/connection-manager.py --human --debug --at AT#XSLMVER && python3 -u /etc/undock/connection-manager.py --human --debug --at AT+CGSN=1")
         ]
         
         for txt, cmd in tests:
