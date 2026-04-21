@@ -227,19 +227,50 @@ class ControlPanelV5:
 
     # --- LOGIC ---
     def log(self, m):
-        t = datetime.datetime.now().strftime("%H:%M:%S")
-        strip_m = str(m).replace('\x1b[31;1;5m', '').replace('\x1b[32m', '').replace('\x1b[31m', '').replace('\x1b[33m', '').replace('\x1b[36m', '').replace('\x1b[35m', '').replace('\x1b[0m', '').replace('\x1b[22m', '')
-        self.error_text.configure(state='normal'); self.error_text.insert(tk.END, f"{t}: {strip_m}\n"); self.error_text.see(tk.END); self.error_text.configure(state='disabled')
+        def _update_log():
+            t = datetime.datetime.now().strftime("%H:%M:%S")
+            # Strip ANSI color codes from the command output for clean logging
+            strip_m = str(m).replace('\x1b[31;1;5m', '').replace('\x1b[32m', '').replace('\x1b[31m', '').replace('\x1b[33m', '').replace('\x1b[36m', '').replace('\x1b[35m', '').replace('\x1b[0m', '').replace('\x1b[22m', '')
+            self.error_text.configure(state='normal')
+            self.error_text.insert(tk.END, f"{t}: {strip_m}\n")
+            self.error_text.see(tk.END)
+            self.error_text.configure(state='disabled')
+        # Schedule the UI update to run in the main thread to prevent crashes
+        self.root.after(0, _update_log)
 
     def run_raw_sync(self, cmd):
-        self.is_busy = True; self.log(f"> {cmd}")
+        self.is_busy = True
+        self.log(f"> {cmd}")
         with self.cmd_lock:
+            success = False
             try:
-                r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
-                if r.stdout: self.log(r.stdout.strip())
-                success = (r.returncode == 0)
-            except Exception as e: self.log(f"Err: {e}"); success = False
-        self.is_busy = False; return success
+                # Use Popen to stream output in real-time without a timeout
+                process = subprocess.Popen(
+                    cmd,
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                    bufsize=1, # Line-buffered
+                    encoding='utf-8',
+                    errors='replace'
+                )
+
+                # Read and log each line as it comes in
+                for line in process.stdout:
+                    if line:
+                        self.log(line.strip())
+                
+                return_code = process.wait()
+                success = (return_code == 0)
+                if not success:
+                    self.log(f"Process finished with return code {return_code}")
+
+            except Exception as e:
+                self.log(f"Err: {e}")
+                success = False
+        self.is_busy = False
+        return success
 
     def run_bg(self, cmd, after_func=None):
         def _t():
